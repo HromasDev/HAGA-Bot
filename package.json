@@ -1,0 +1,23 @@
+{
+  "name": "nodejs",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@types/node": "^18.0.6",
+    "axios": "^1.5.0",
+    "axios-cookiejar-support": "^4.0.7",
+    "cheerio": "^1.0.0-rc.12",
+    "deferred": "^0.7.11",
+    "iconv-lite": "^0.6.3",
+    "mongodb": "^5.8.1",
+    "node-fetch": "^3.2.6",
+    "node-telegram-bot-api": "^0.61.0"
+  }
+}
