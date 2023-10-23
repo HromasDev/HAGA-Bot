@@ -2,7 +2,7 @@ const telegram = require('node-telegram-bot-api')
 // const mongodb = require('./db.js')
 const bot = new telegram('5225059269:AAHfU4hsvN3xyJdCYU2yuBuBPunwobztYlM', { polling: true })
 const deferred = require('deferred')
-
+const keepAlive = require('./server.js')
 const axios = require('axios');
 const cheerio = require('cheerio');
 const iconv = require('iconv-lite');
@@ -308,3 +308,5 @@ bot.on('callback_query', async (msg) => {
     await bot.sendMessage(msg.from.id, answer, navButtons('progs'))
   }
 });
+
+keepAlive();
