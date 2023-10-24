@@ -11,7 +11,7 @@
   "license": "ISC",
   "dependencies": {
     "@types/node": "^18.0.6",
-    "axios": "^1.5.0",
+    "axios": "^0.27.2",
     "axios-cookiejar-support": "^4.0.7",
     "cheerio": "^1.0.0-rc.12",
     "deferred": "^0.7.11",
