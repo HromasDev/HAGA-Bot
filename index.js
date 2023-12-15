@@ -11,7 +11,13 @@ const fs = require('fs');
 const gamesPageUrl = 'https://freetp.org/polnyy-spisok-igr-na-sayte.html';
 
 async function getGameInfo(url, type) {
-  const response = await axios.get(url, { responseType: 'arraybuffer' })
+  const axiosConfig = {
+  headers: {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+  },
+};
+
+const response = await axios.get(url, axiosConfig)
   .catch(error => {
     console.error('AxiosError:', error);
     throw error; // Rethrow the error to be caught by the outer catch block.
