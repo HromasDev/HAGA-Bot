@@ -11,7 +11,11 @@ const fs = require('fs');
 const gamesPageUrl = 'https://freetp.org/polnyy-spisok-igr-na-sayte.html';
 
 async function getGameInfo(url, type) {
-  const response = await axios.get(url, { responseType: 'arraybuffer' });
+  const response = await axios.get(url, { responseType: 'arraybuffer' })
+  .catch(error => {
+    console.error('AxiosError:', error);
+    throw error; // Rethrow the error to be caught by the outer catch block.
+  });
   const html = iconv.decode(Buffer.from(response.data), 'windows-1251');
   const $ = cheerio.load(html);
 
