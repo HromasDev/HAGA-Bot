@@ -10,17 +10,24 @@ const fs = require('fs');
 
 const gamesPageUrl = 'https://freetp.org/polnyy-spisok-igr-na-sayte.html';
 
-async function getGameInfo(url, type) {
-  const axiosConfig = {
-  headers: {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+axios.interceptors.response.use(
+  response => {
+    response.headers['Access-Control-Allow-Origin'] = '*';
+    return response;
   },
-};
+  error => {
+    return Promise.reject(error);
+  }
+);
 
-const response = await axios.get(url, axiosConfig)
-  .catch(error => {
-    console.error('AxiosError:', error);
-    throw error; // Rethrow the error to be caught by the outer catch block.
+
+async function getGameInfo(url, type) {
+
+
+  const response = await axios.get(url, {
+    headers: {
+      'Access-Control-Allow-Origin': '*'
+    }
   });
   const html = iconv.decode(Buffer.from(response.data), 'windows-1251');
   const $ = cheerio.load(html);
@@ -43,7 +50,7 @@ const response = await axios.get(url, axiosConfig)
   } else {
     let gamelinks = [];
     let linksDescriptions = [];
-    
+
     $('.quote a').each((i, elem) => {
       let href = $(elem).attr('href');
       if (!gamelinks.includes(href)) {
@@ -61,7 +68,7 @@ const response = await axios.get(url, axiosConfig)
         }
       }
     });
-    
+
     $('.attachment > a:nth-child(1)').each((i, elem) => {
       let href = $(elem).attr('href');
       if (!gamelinks.includes(href)) {
@@ -69,7 +76,7 @@ const response = await axios.get(url, axiosConfig)
         linksDescriptions.push($(elem).parent().next('p').text());
       }
     });
-    
+
     let urls = [];
     for (let i = 1; i < gamelinks.length; i++) {
       const parts = gamelinks[i].split('//freetp.org/getfile-');
@@ -83,8 +90,8 @@ const response = await axios.get(url, axiosConfig)
       }
     }
     return urls;
-    
-    
+
+
   }
 }
 
