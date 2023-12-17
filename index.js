@@ -10,25 +10,8 @@ const fs = require('fs');
 
 const gamesPageUrl = 'https://freetp.org/polnyy-spisok-igr-na-sayte.html';
 
-axios.interceptors.response.use(
-  response => {
-    response.headers['Access-Control-Allow-Origin'] = '*';
-    return response;
-  },
-  error => {
-    return Promise.reject(error);
-  }
-);
-
-
 async function getGameInfo(url, type) {
-
-
-  const response = await axios.get(url, {
-    headers: {
-      'Access-Control-Allow-Origin': '*'
-    }
-  });
+  const response = await axios.get(url, { responseType: 'arraybuffer' });
   const html = iconv.decode(Buffer.from(response.data), 'windows-1251');
   const $ = cheerio.load(html);
 
@@ -102,7 +85,6 @@ async function fetchPages(type) {
     const $ = cheerio.load(html);
 
     let list = [];
-
     $('#dle-content div a').each((i, elem) => { // получаем список игр
       let info = {};
       info['title'] = $(elem).attr('title');
@@ -121,6 +103,7 @@ async function fetchPages(type) {
       let links = await getGameInfo(list[i]['url'], 'gamelinks')
       list[i]['links'] = links;
 
+      console.log(list[i]['description']);
       // выводим прогресс загрузки
       const progress = ((i / list.length) * 100).toFixed(1);
       console.log(`[ FreeTP ] Загружено: ${progress}%`);
