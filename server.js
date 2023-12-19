@@ -11,7 +11,7 @@ server.all('/', (req, res) => {
 })
 
 function keepAlive() {
-  server.listen(3000, () => { console.log("Server is online!") });
+  server.listen(80, () => { console.log("Server is online!") });
 }
 
 module.exports = keepAlive;
