@@ -309,4 +309,4 @@ bot.on('callback_query', async (msg) => {
   }
 });
 
-// keepAlive();
+keepAlive();
