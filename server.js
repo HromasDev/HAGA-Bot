@@ -1,5 +1,8 @@
 const express = require('express');
 const server = express();
+var cors = require('cors');
+
+server.use(cors());
 
 server.all('/', (req, res) => {
   res.setHeader('Content-Type', 'text/html');
