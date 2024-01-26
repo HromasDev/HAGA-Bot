@@ -11,72 +11,77 @@ const fs = require('fs');
 const gamesPageUrl = 'https://freetp.org/polnyy-spisok-igr-na-sayte.html';
 
 async function getGameInfo(url, type) {
-  const response = await axios.get(url, { responseType: 'arraybuffer' });
-  const html = iconv.decode(Buffer.from(response.data), 'windows-1251');
-  const $ = cheerio.load(html);
+  const response = await fetch(url);
 
-  if (type == 'gameinfo') {
-    let gameinfo = [];
-    try {
-      $('.quote').each((i, elem) => {
-        gameinfo.push($(elem).text())
-      });
-      gameinfo[0] = gameinfo[0].split('\n');
-      gameinfo[0] = gameinfo[0].filter((n) => {
-        const lowerCaseString = n.toLowerCase();
-        return !(lowerCaseString.includes('обзор игры') || lowerCaseString.includes('системные требования')) && !(lowerCaseString == '');
-      });
-    } catch (error) {
-      console.log(error)
-    }
-    return gameinfo
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`);
   } else {
-    let gamelinks = [];
-    let linksDescriptions = [];
+    const data = await response.arrayBuffer();
+    const html = iconv.decode(Buffer.from(data), 'windows-1251');
+    const $ = cheerio.load(html);
 
-    $('.quote a').each((i, elem) => {
-      let href = $(elem).attr('href');
-      if (!gamelinks.includes(href)) {
-        gamelinks.push(href);
-        if ($(elem).parent().hasClass('attachment')) {
-          let description = $(elem).parent().text();
-          let bracketText = description.match(/\[.*?\]/g);
-          if (bracketText) {
-            linksDescriptions.push(bracketText.join(' '));
+    if (type == 'gameinfo') {
+      let gameinfo = [];
+      try {
+        $('.quote').each((i, elem) => {
+          gameinfo.push($(elem).text())
+        });
+        gameinfo[0] = gameinfo[0].split('\n');
+        gameinfo[0] = gameinfo[0].filter((n) => {
+          const lowerCaseString = n.toLowerCase();
+          return !(lowerCaseString.includes('обзор игры') || lowerCaseString.includes('системные требования')) && !(lowerCaseString == '');
+        });
+      } catch (error) {
+        console.log(error)
+      }
+      return gameinfo
+    } else {
+      let gamelinks = [];
+      let linksDescriptions = [];
+
+      $('.quote a').each((i, elem) => {
+        let href = $(elem).attr('href');
+        if (!gamelinks.includes(href)) {
+          gamelinks.push(href);
+          if ($(elem).parent().hasClass('attachment')) {
+            let description = $(elem).parent().text();
+            let bracketText = description.match(/\[.*?\]/g);
+            if (bracketText) {
+              linksDescriptions.push(bracketText.join(' '));
+            } else {
+              linksDescriptions.push(description);
+            }
           } else {
-            linksDescriptions.push(description);
+            linksDescriptions.push($(elem).parent().next('p').text());
           }
-        } else {
+        }
+      });
+
+      $('.attachment > a:nth-child(1)').each((i, elem) => {
+        let href = $(elem).attr('href');
+        if (!gamelinks.includes(href)) {
+          gamelinks.push(href);
           linksDescriptions.push($(elem).parent().next('p').text());
         }
-      }
-    });
+      });
 
-    $('.attachment > a:nth-child(1)').each((i, elem) => {
-      let href = $(elem).attr('href');
-      if (!gamelinks.includes(href)) {
-        gamelinks.push(href);
-        linksDescriptions.push($(elem).parent().next('p').text());
-      }
-    });
-
-    let urls = [];
-    for (let i = 1; i < gamelinks.length; i++) {
-      const parts = gamelinks[i].split('//freetp.org/getfile-');
-      if (parts[1]) {
-        let id = parts[1].split('https://')[0];
-        id = id.replace(/\D/g, '');
-        if (id) {
-          urls.push(linksDescriptions[i]);
-          urls.push(`https://freetp.org/engine/download.php?id=${id}&area=`);
+      let urls = [];
+      for (let i = 1; i < gamelinks.length; i++) {
+        const parts = gamelinks[i].split('//freetp.org/getfile-');
+        if (parts[1]) {
+          let id = parts[1].split('https://')[0];
+          id = id.replace(/\D/g, '');
+          if (id) {
+            urls.push(linksDescriptions[i]);
+            urls.push(`https://freetp.org/engine/download.php?id=${id}&area=`);
+          }
         }
       }
+      return urls;
     }
-    return urls;
-
-
   }
 }
+
 
 async function fetchPages(type) {
   if (type == 'games') {
