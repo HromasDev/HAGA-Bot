@@ -53,7 +53,11 @@ async function GetGameData(url) {
 
   let game_data = [];
   let files = [];
+  let aditional_files = [];
+
   let manual = "";
+
+  // Получаем описание игры
   $('.quote').each((i, elem) => {
     game_data.push($(elem).text())
   });
@@ -62,11 +66,22 @@ async function GetGameData(url) {
     game_data.push($(elem).text())
   });
 
+  // Получаем обложку игры
+  let cover = $('noindex > img').first().attr('src');
+
+  // Получаем системные требования игры
+  let system_requirements = $('.text_spoiler > img').first().attr('src');
+
+  // Получаем файлы
   $('a[target="_blank"]').each((_idx, el) => {
     let title = $(el).text();
     if ($(el).attr('href').includes('getfile-')) {
       let file_id = $(el).attr('href').split('getfile-')[1];
-      files.push({ title, file_id });
+      if (files.length == 0 || title.toLowerCase().includes('fix') && files.length < 2) {
+        files.push({ title, file_id });
+      } else if (aditional_files.length < 6) {
+        aditional_files.push({ title, file_id });
+      }
     }
   });
 
@@ -77,7 +92,7 @@ async function GetGameData(url) {
     return !(lowerCaseString.includes('обзор игры') || lowerCaseString.includes('системные требования')) && !(lowerCaseString == '');
   });
 
-  return { description: game_data[0], files };
+  return { description: game_data[0], files, cover, aditional_files, system_requirements };
 }
 
 let defferred = [];
@@ -85,33 +100,54 @@ let defferred = [];
 bot.on('message', async (msg) => {
   const foundUser = defferred.find(data => data.user_id === msg.chat.id);
 
-  if (foundUser) {
-    if (foundUser.games) {
-      const gameIndex = +msg.text;
-      const gameToFind = foundUser.games.find(game => game.index === gameIndex);
+  if (foundUser && foundUser.games) {
+    const gameIndex = +msg.text;
+    const gameToFind = foundUser.games.find(game => game.index === gameIndex);
 
-      if (gameToFind) {
-        const answer = await GetGameData(gameToFind.url);
-        const description = answer.description.join('\n');
+    if (gameToFind) {
+      const answer = await GetGameData(gameToFind.url);
+      const description = answer.description.join('\n');
+      const aditional_files = answer.aditional_files;
 
-        if (answer.files.length < 1) {
-          await bot.sendMessage(msg.from.id, 'У этой игры нету файлов, попробуйте выбрать другую игру');
-          return
-        } else if (answer.description.length < 1) {
-          await bot.sendMessage(msg.from.id, 'Без описания:');
+      if (!answer.cover || !answer.system_requirements || !answer.files.length) {
+        await bot.sendMessage(msg.from.id, 'Не удалось получить все данные об игре. Попробуйте выбрать другую игру.');
+        return;
+      }
+
+      async function sendPhoto(chatId, imageUrl, description) {
+        await bot.sendPhoto(chatId, imageUrl, { caption: description.slice(0, 1024) });
+      }
+
+      await sendPhoto(msg.chat.id, process.env.GAMES_URL + answer.cover, description);
+      await sendPhoto(msg.chat.id, answer.system_requirements.startsWith('http') ? answer.system_requirements : `https:${answer.system_requirements}`, "Системные требования");
+
+      for (const file of answer.files) {
+        const saveDirectory = path.join('files', '' + msg.chat.id);
+        if (!fs.existsSync(saveDirectory)) {
+          fs.mkdirSync(saveDirectory, { recursive: true });
         }
 
-        await bot.sendMessage(msg.from.id, description);
+        const fileUrl = `${process.env.GAMES_DIRECT_LINK}${file.file_id}`;
+        const fileName = await downloadFile(fileUrl, saveDirectory); // Ждем, пока файл будет загружен и сохранен
+        const filePath = path.join(saveDirectory, fileName);
 
-        await Promise.all(answer.files.map(async file => {
+        if (fs.existsSync(filePath)) {
+          await bot.sendDocument(msg.chat.id, fs.createReadStream(filePath));
+          fs.unlinkSync(filePath);
+        } else {
+          console.error('Файл не найден:', filePath);
+        }
+      }
+
+      if (aditional_files.length > 0) {
+        await bot.sendMessage(msg.from.id, 'Дополнительные файлы:');
+        for (const file of answer.aditional_files) {
           const saveDirectory = path.join('files', '' + msg.chat.id);
-
           if (!fs.existsSync(saveDirectory)) {
             fs.mkdirSync(saveDirectory, { recursive: true });
           }
 
           const fileUrl = `${process.env.GAMES_DIRECT_LINK}${file.file_id}`;
-
           const fileName = await downloadFile(fileUrl, saveDirectory); // Ждем, пока файл будет загружен и сохранен
           const filePath = path.join(saveDirectory, fileName);
 
@@ -121,12 +157,15 @@ bot.on('message', async (msg) => {
           } else {
             console.error('Файл не найден:', filePath);
           }
-        }));
-      } else {
-        await bot.sendMessage(msg.from.id, 'Выберите игру от ' + 1 + ' до ' + foundUser.games.length, navButtons('games'));
-        return
+        }
       }
+    } else {
+      await bot.sendMessage(msg.from.id, 'Выберите игру от ' + 1 + ' до ' + foundUser.games.length, navButtons('games'));
+      return;
     }
+  }
+
+  if (foundUser) {
     foundUser.def.resolve(msg);
     defferred.splice(defferred.indexOf(foundUser), 1);
     return;
@@ -134,31 +173,19 @@ bot.on('message', async (msg) => {
 
   if (msg.text === '/start') {
     await bot.sendMessage(msg.chat.id, "Привет. Я бот, созданный для загрузки игр/приложений.", options);
-  }
-
-  else if (msg.text === 'Скачать') {
+  } else if (msg.text === 'Скачать') {
     await bot.sendMessage(msg.chat.id, 'Что будем скачивать?', download);
-  }
-
-  else if (msg.data == 'games') {
-    const question = await msg.question('Какую игру вы хотите?')
+  } else if (msg.data === 'games') {
+    const question = await msg.question('Какую игру вы хотите?');
     const answer = await searchGame(question, msg.from.id);
-    await bot.sendMessage(msg.from.id, answer, navButtons('games'))
-  }
-
-  else if (msg.data == 'progs') {
-    await bot.sendMessage(msg.from.id, 'В разработке...', navButtons('progs'))
-  }
-
-  else if (msg.text === 'Discord') {
+    await bot.sendMessage(msg.from.id, answer, navButtons('games'));
+  } else if (msg.data === 'progs') {
+    await bot.sendMessage(msg.from.id, 'В разработке...', navButtons('progs'));
+  } else if (msg.text === 'Discord') {
     await bot.sendMessage(msg.chat.id, "📨 https://discord.gg/M7MqQhhu5j 📨");
-  }
-
-  else if (msg.text === 'Облако') {
+  } else if (msg.text === 'Облако') {
     await bot.sendMessage(msg.chat.id, "Ваше хранилище:");
-  }
-
-  else {
+  } else {
     await bot.sendMessage(msg.chat.id, "Что это?");
   }
 });
