@@ -12,22 +12,29 @@ const bot = new telegram(process.env.TOKEN, { polling: true })
 
 const gamesPageUrl = process.env.GAMES_PAGE_URL;
 
+let defferred = [];
+
 const downloadFile = async (url, saveDirectory) => {
   const response = await axios.get(url, { responseType: 'stream' });
-
   const contentDisposition = response.headers['content-disposition'];
-  const match = contentDisposition.match(/attachment; filename="([^"]+)"/);
 
-  const fileName = match[1];
-  const savePath = path.join(saveDirectory, fileName);
+  try {
+    const match = contentDisposition.match(/attachment; filename="([^"]+)"/);
 
-  const writer = fs.createWriteStream(savePath);
-  response.data.pipe(writer);
+    const fileName = match[1];
+    const savePath = path.join(saveDirectory, fileName);
 
-  return new Promise((resolve, reject) => {
-    writer.on('finish', () => resolve(fileName));
-    writer.on('error', reject);
-  });
+    const writer = fs.createWriteStream(savePath);
+    response.data.pipe(writer);
+
+    return new Promise((resolve, reject) => {
+      writer.on('finish', () => resolve(fileName));
+      writer.on('error', reject);
+    });
+  } catch (error) {
+    console.error('Ошибка:', "Ссылка на скачивание не работает!", error);
+    return
+  }
 }
 
 async function GetGames() {
@@ -95,7 +102,67 @@ async function GetGameData(url) {
   return { description: game_data[0], files, cover, aditional_files, system_requirements };
 }
 
-let defferred = [];
+async function sendGameDetails(user_id, gameUrl, game) {
+  const answer = await GetGameData(gameUrl);
+  const description = answer.description.join('\n');
+
+  if (!answer.cover || !answer.system_requirements || !answer.files.length) {
+    await bot.sendMessage(user_id, 'Не удалось получить все данные об игре. Попробуйте выбрать другую игру.');
+    return;
+  }
+
+  async function sendPhoto(chatId, imageUrl, description) {
+    await bot.sendPhoto(chatId, imageUrl, { caption: description.slice(0, 1024) });
+  }
+
+  await sendPhoto(user_id, process.env.GAMES_URL + answer.cover, description);
+  await sendPhoto(user_id, answer.system_requirements.startsWith('http') ? answer.system_requirements : `https:${answer.system_requirements}`, "Системные требования");
+
+  for (const file of answer.files) {
+    const saveDirectory = path.join('files', '' + user_id);
+    if (!fs.existsSync(saveDirectory)) {
+      fs.mkdirSync(saveDirectory, { recursive: true });
+    }
+
+    const fileUrl = `${process.env.GAMES_DIRECT_LINK}${file.file_id}`;
+    const fileName = await downloadFile(fileUrl, saveDirectory); // Ждем, пока файл будет загружен и сохранен
+    if (fileName) {
+      const filePath = path.join(saveDirectory, fileName);
+
+      if (fs.existsSync(filePath)) {
+        await bot.sendDocument(user_id, fs.createReadStream(filePath));
+        fs.unlinkSync(filePath);
+      } else {
+        console.error('Файл не найден:', filePath);
+      }
+    } else {
+      await bot.sendMessage(user_id, `❌ Ссылка на загрузку <a href="${fileUrl}">этого файла</a> не работает!`, { parse_mode: 'html' });
+    }
+  }
+
+  if (answer.aditional_files.length > 0) {
+    await bot.sendMessage(user_id, 'Дополнительные файлы:');
+    for (const file of answer.aditional_files) {
+      const saveDirectory = path.join('files', '' + user_id);
+      if (!fs.existsSync(saveDirectory)) {
+        fs.mkdirSync(saveDirectory, { recursive: true });
+      }
+
+      const fileUrl = `${process.env.GAMES_DIRECT_LINK}${file.file_id}`;
+      const fileName = await downloadFile(fileUrl, saveDirectory); // Ждем, пока файл будет загружен и сохранен
+      if (fileName) {
+        const filePath = path.join(saveDirectory, fileName);
+
+        if (fs.existsSync(filePath)) {
+          await bot.sendDocument(user_id, fs.createReadStream(filePath));
+          fs.unlinkSync(filePath);
+        } else {
+          console.error('Файл не найден:', filePath);
+        }
+      }
+    }
+  }
+}
 
 bot.on('message', async (msg) => {
   const foundUser = defferred.find(data => data.user_id === msg.chat.id);
@@ -105,62 +172,9 @@ bot.on('message', async (msg) => {
     const gameToFind = foundUser.games.find(game => game.index === gameIndex);
 
     if (gameToFind) {
-      const answer = await GetGameData(gameToFind.url);
-      const description = answer.description.join('\n');
-      const aditional_files = answer.aditional_files;
-
-      if (!answer.cover || !answer.system_requirements || !answer.files.length) {
-        await bot.sendMessage(msg.from.id, 'Не удалось получить все данные об игре. Попробуйте выбрать другую игру.');
-        return;
-      }
-
-      async function sendPhoto(chatId, imageUrl, description) {
-        await bot.sendPhoto(chatId, imageUrl, { caption: description.slice(0, 1024) });
-      }
-
-      await sendPhoto(msg.chat.id, process.env.GAMES_URL + answer.cover, description);
-      await sendPhoto(msg.chat.id, answer.system_requirements.startsWith('http') ? answer.system_requirements : `https:${answer.system_requirements}`, "Системные требования");
-
-      for (const file of answer.files) {
-        const saveDirectory = path.join('files', '' + msg.chat.id);
-        if (!fs.existsSync(saveDirectory)) {
-          fs.mkdirSync(saveDirectory, { recursive: true });
-        }
-
-        const fileUrl = `${process.env.GAMES_DIRECT_LINK}${file.file_id}`;
-        const fileName = await downloadFile(fileUrl, saveDirectory); // Ждем, пока файл будет загружен и сохранен
-        const filePath = path.join(saveDirectory, fileName);
-
-        if (fs.existsSync(filePath)) {
-          await bot.sendDocument(msg.chat.id, fs.createReadStream(filePath));
-          fs.unlinkSync(filePath);
-        } else {
-          console.error('Файл не найден:', filePath);
-        }
-      }
-
-      if (aditional_files.length > 0) {
-        await bot.sendMessage(msg.from.id, 'Дополнительные файлы:');
-        for (const file of answer.aditional_files) {
-          const saveDirectory = path.join('files', '' + msg.chat.id);
-          if (!fs.existsSync(saveDirectory)) {
-            fs.mkdirSync(saveDirectory, { recursive: true });
-          }
-
-          const fileUrl = `${process.env.GAMES_DIRECT_LINK}${file.file_id}`;
-          const fileName = await downloadFile(fileUrl, saveDirectory); // Ждем, пока файл будет загружен и сохранен
-          const filePath = path.join(saveDirectory, fileName);
-
-          if (fs.existsSync(filePath)) {
-            await bot.sendDocument(msg.chat.id, fs.createReadStream(filePath));
-            fs.unlinkSync(filePath);
-          } else {
-            console.error('Файл не найден:', filePath);
-          }
-        }
-      }
+      await sendGameDetails(msg.chat.id, gameToFind.url, gameToFind);
     } else {
-      await bot.sendMessage(msg.from.id, 'Выберите игру от ' + 1 + ' до ' + foundUser.games.length, navButtons('games'));
+      await bot.sendMessage(msg.from.id, 'Выберите игру от 1 до ' + foundUser.games.length, navButtons('games'));
       return;
     }
   }
@@ -206,6 +220,13 @@ async function searchGame(prompt, user_id) {
     }
   });
 
+  if (findGames.length === 0) text = 'По вашему запросу ничего не найдено.';
+  else if (findGames.length === 1) {
+    // Если найдена только одна игра, отправляем данные об игре пользователю
+    const gameToFind = findGames[0];
+    await sendGameDetails(user_id, gameToFind.url, gameToFind);
+    return;
+  }
   if (text.length > 4000) text = 'Получено слишком много результатов, попробуйте уточнить запрос или изменить категорию.';
   else {
     const foundUser = defferred.find(data => data.user_id === user_id);
@@ -246,7 +267,7 @@ bot.on('callback_query', async (msg) => {
   if (msg.data == 'games') {
     const question = await msg.question('Какую игру вы хотите?')
     const answer = await searchGame(question, msg.from.id);
-    await bot.sendMessage(msg.from.id, answer, navButtons('games'))
+    if (answer) await bot.sendMessage(msg.from.id, answer, navButtons('games'))
   }
   if (msg.data == 'progs') {
     const answer = 'В разработке...'
