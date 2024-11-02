@@ -187,20 +187,11 @@ bot.on('message', async (msg) => {
 
   if (msg.text === '/start') {
     await bot.sendMessage(msg.chat.id, "Привет. Я бот, созданный для загрузки игр/приложений.", options);
-  } else if (msg.text === 'Скачать') {
-    await bot.sendMessage(msg.chat.id, 'Что будем скачивать?', download);
-  } else if (msg.data === 'games') {
-    const question = await msg.question('Какую игру вы хотите?');
-    const answer = await searchGame(question, msg.from.id);
-    await bot.sendMessage(msg.from.id, answer, navButtons('games'));
-  } else if (msg.data === 'progs') {
-    await bot.sendMessage(msg.from.id, 'В разработке...', navButtons('progs'));
   } else if (msg.text === 'Discord') {
     await bot.sendMessage(msg.chat.id, "📨 https://discord.gg/M7MqQhhu5j 📨");
-  } else if (msg.text === 'Облако') {
-    await bot.sendMessage(msg.chat.id, "Ваше хранилище:");
   } else {
-    await bot.sendMessage(msg.chat.id, "Что это?");
+    const answer = await searchGame(msg.text, msg.from.id);
+    if (answer) await bot.sendMessage(msg.from.id, answer, navButtons('games'));
   }
 });
 
@@ -241,7 +232,7 @@ async function searchGame(prompt, user_id) {
 }
 
 bot.on('callback_query', async (msg) => {
-  // Чистим запросы текущего пользователя
+  // Clean up current user's requests
   defferred = defferred.filter(data => {
     if (data.user_id === msg.from.id) {
       data.def.resolve(msg);
@@ -250,27 +241,17 @@ bot.on('callback_query', async (msg) => {
     return true;
   });
 
+  // Define the question method on the msg object
   msg.question = async (text) => {
     await bot.editMessageText(text, { chat_id: msg.from.id, message_id: msg.message.message_id });
-    const def = deferred();
+    const def = new deferred();
     defferred.push({ user_id: msg.from.id, def });
     return await def.promise(data => data.text);
   };
 
-  if (msg.data == 'changeCategory') {
-    bot.editMessageText('Что будем скачивать?', {
-      chat_id: msg.from.id,
-      message_id: msg.message.message_id,
-      ...download
-    });
-  }
   if (msg.data == 'games') {
-    const question = await msg.question('Какую игру вы хотите?')
+    const question = await msg.question('Какую игру вы хотите?');
     const answer = await searchGame(question, msg.from.id);
-    if (answer) await bot.sendMessage(msg.from.id, answer, navButtons('games'))
+    if (answer) await bot.sendMessage(msg.from.id, answer, navButtons('games'));
   }
-  if (msg.data == 'progs') {
-    const answer = 'В разработке...'
-    await bot.sendMessage(msg.from.id, answer, navButtons('progs'))
-  }
-})
+});
